@@ -287,6 +287,9 @@ async function command(input: unknown) {
     case "account.open":
       await publisher.open(c.id);
       break;
+    case "account.checkAll":
+      await publisher.checkAll();
+      break;
     case "account.check":
       await publisher.check(c.id);
       break;
@@ -378,7 +381,50 @@ async function command(input: unknown) {
   }
   return structuredClone(store.state);
 }
-app.on("second-instance", () => {
+async function healthReport(argv: string[]) {
+  const requestId = argv
+    .find((x) => /^--check-accounts=[a-f0-9-]{36}$/.test(x))
+    ?.split("=")[1];
+  if (!requestId) return;
+  try {
+    await publisher.checkAll();
+    const report = {
+      requestId,
+      checkedAt: new Date().toISOString(),
+      accounts: store.state.accounts.map(
+        ({
+          id,
+          platform,
+          name,
+          status,
+          checkedAt,
+          checkMethod,
+          checkMessage,
+        }) => ({
+          id,
+          platform,
+          name,
+          status,
+          checkedAt,
+          checkMethod,
+          checkMessage,
+        }),
+      ),
+    };
+    const dest = path.join(store.directory, "account-health-report.json");
+    fs.writeFileSync(dest + ".tmp", JSON.stringify(report, null, 2), {
+      mode: 0o600,
+    });
+    fs.renameSync(dest + ".tmp", dest);
+  } catch {
+    /* The CLI deadline reports failures without logging credentials. */
+  }
+}
+app.on("second-instance", (_event, argv) => {
+  if (argv.some((x) => x.startsWith("--check-accounts="))) {
+    void healthReport(argv);
+    return;
+  }
   main?.show();
   main?.focus();
 });
@@ -569,6 +615,7 @@ app.whenReady().then(async () => {
       await main.loadURL(process.env.STUDIO_DEV_URL);
     else await main.loadFile(rendererPath);
     publisher.start();
+    void healthReport(process.argv);
     main.webContents.on("will-prevent-unload", (event) => {
       const choice = dialog.showMessageBoxSync(main, {
         type: "question",

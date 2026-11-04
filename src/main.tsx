@@ -1021,10 +1021,16 @@ function App() {
                 添加账号
               </button>
             </section>
+            <button
+              disabled={busy}
+              onClick={() => act({ type: "account.checkAll" })}
+            >
+              批量快速检测全部账号
+            </button>
             <div className="info-banner">
               <AlertCircle size={17} />
               <span>
-                “编辑器已验证”表示最近一次检查识别到标题和正文，不代表平台账号永久在线。首次分发前请核对窗口中的账号。拖动卡片右上角手柄可调整顺序。
+                后台并发检测，不弹出平台窗口。已登录不等于编辑器可用；网络失败会显示暂未确认。“编辑器已验证”表示最近一次检查识别到标题和正文，不代表平台账号永久在线。首次分发前请核对窗口中的账号。拖动卡片右上角手柄可调整顺序。
               </span>
             </div>
             <div className="account-grid">
@@ -1084,9 +1090,11 @@ function App() {
                       >
                         {a.status === "editor_ready"
                           ? "编辑器已验证"
-                          : a.status === "needs_login"
-                            ? "需要登录"
-                            : "未验证编辑器"}
+                          : a.status === "authenticated"
+                            ? "已登录"
+                            : a.status === "needs_login"
+                              ? "需要登录"
+                              : "暂未确认"}
                       </span>
                       <button
                         type="button"
@@ -1127,6 +1135,10 @@ function App() {
                       ? "最近检查 " + new Date(a.checkedAt).toLocaleString()
                       : "尚未检查编辑器"}
                   </small>
+                  <small>
+                    {a.checkMessage}
+                    {a.checkMethod ? ` · ${a.checkMethod}` : ""}
+                  </small>
                   <div className="button-row">
                     <button
                       className="small"
@@ -1153,7 +1165,8 @@ function App() {
                             s.accounts.find((x) => x.id === a.id)?.status ===
                               "editor_ready"
                               ? "已识别标题与正文编辑器"
-                              : "请在平台窗口登录并打开文章编辑页",
+                              : s.accounts.find((x) => x.id === a.id)
+                                  ?.checkMessage || "暂未确认，请手动打开平台",
                           );
                         }
                       }}
@@ -1733,7 +1746,9 @@ function ImageLightbox({
         </header>
         <div
           className={"image-lightbox-canvas" + (original ? " original" : "")}
-          onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
         >
           <img src={src} alt={name} />
         </div>

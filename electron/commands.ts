@@ -18,6 +18,7 @@ const shapes = {
   "account.delete": id,
   "account.open": id,
   "account.check": id,
+  "account.checkAll": {},
   "account.reorder": {
     ids: z
       .array(idSchema)

@@ -155,8 +155,10 @@ export const accountSchema = z.object({
   id: idSchema,
   platform: platformSchema,
   name: z.string().min(1).max(80),
-  status: z.enum(["unknown", "editor_ready", "needs_login"]),
+  status: z.enum(["unknown", "authenticated", "editor_ready", "needs_login"]),
   checkedAt: z.string().optional(),
+  checkMethod: z.enum(["api", "http", "page"]).optional(),
+  checkMessage: z.string().max(250).optional(),
 });
 export type Account = z.infer<typeof accountSchema>;
 export const assetSchema = z.object({
@@ -225,6 +227,7 @@ export type Command =
   | { type: "account.delete"; id: string }
   | { type: "account.open"; id: string }
   | { type: "account.check"; id: string }
+  | { type: "account.checkAll" }
   | { type: "account.reorder"; ids: string[] }
   | {
       type: "queue.add";

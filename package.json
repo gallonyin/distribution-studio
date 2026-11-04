@@ -16,7 +16,8 @@
     "test:e2e": "npm run build && playwright test",
     "pack": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac zip",
-    "dist:win": "npm run build && electron-builder --win nsis --x64"
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "accounts:check": "node scripts/check-accounts.mjs"
   },
   "dependencies": {
     "fflate": "0.8.3",

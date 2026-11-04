@@ -1,3 +1,5 @@
+import { checkAccountHealth } from "./account-health";
+import { boundedMap } from "./account-health-signals";
 import { BrowserWindow, Menu, session, dialog } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -322,26 +324,53 @@ export class Publisher {
       );
     }
   }
-  async check(id: string) {
-    const a = this.account(id),
-      win = await this.open(id);
-    const results = await this.evaluate(win, a, {
-      mode: "probe",
-      platform: a.platform,
-      title: "",
-      html: "",
-      text: "",
-      markdown: "",
-      images: [],
+  private healthChecks = new Map<string, Promise<boolean>>();
+  private allHealth?: Promise<void>;
+  check(id: string): Promise<boolean> {
+    const current = this.healthChecks.get(id);
+    if (current) return current;
+    const task = (async () => {
+      const a = this.account(id);
+      const result = await checkAccountHealth(a, this.windows.get(id));
+      this.store.change((s) => {
+        const target = s.accounts.find((x) => x.id === id);
+        if (!target) return;
+        Object.assign(target, {
+          status: result.status,
+          checkedAt: new Date().toISOString(),
+          checkMethod: result.method,
+          checkMessage: result.message,
+        });
+      });
+      return result.status === "editor_ready";
+    })().finally(() => this.healthChecks.delete(id));
+    this.healthChecks.set(id, task);
+    return task;
+  }
+  checkAll(): Promise<void> {
+    if (this.allHealth) return this.allHealth;
+    this.allHealth = boundedMap(
+      [...this.store.state.accounts],
+      3,
+      async (a) => {
+        try {
+          await this.check(a.id);
+        } catch {
+          this.store.change((s) => {
+            const target = s.accounts.find((x) => x.id === a.id);
+            if (target)
+              Object.assign(target, {
+                status: "unknown",
+                checkedAt: new Date().toISOString(),
+                checkMessage: "检测失败，请手动确认",
+              });
+          });
+        }
+      },
+    ).finally(() => {
+      this.allHealth = undefined;
     });
-    const ready =
-      results.some((r) => r.titleFound) && results.some((r) => r.bodyFound);
-    this.store.change((s) => {
-      const target = s.accounts.find((x) => x.id === id)!;
-      target.status = ready ? "editor_ready" : "unknown";
-      target.checkedAt = new Date().toISOString();
-    });
-    return ready;
+    return this.allHealth;
   }
   async tick() {
     if (

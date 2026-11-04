@@ -939,7 +939,7 @@ test("百家号新版编辑器检查后立即更新账号卡片状态", async ()
   const card = page.locator(".account-card").filter({
     has: page.getByRole("heading", { name: "百家号新版编辑器" }),
   });
-  await expect(card.getByText("未验证编辑器", { exact: true })).toBeVisible();
+  await expect(card.getByText("暂未确认", { exact: true })).toBeVisible();
   await card.getByRole("button", { name: "检查", exact: true }).click();
   await expect(card.getByText("编辑器已验证", { exact: true })).toBeVisible();
   await expect(card.getByText(/最近检查/)).toBeVisible();
