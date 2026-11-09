@@ -261,6 +261,9 @@ export type Command =
   | { type: "article.export"; id: string }
   | { type: "data.open" };
 export interface Bridge {
+  vault(
+    action: import("./vault-domain").VaultAction,
+  ): Promise<import("./vault-domain").VaultResult>;
   imageConfig(action: ImageAction): Promise<ImageConfigView>;
   generateImage(request: ImageRequest): Promise<ImageResult>;
   bootstrap(): Promise<Bootstrap>;

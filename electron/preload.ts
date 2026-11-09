@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, State } from "../src/domain";
 const bridge: Bridge = {
+  vault: (action) => ipcRenderer.invoke("studio:vault", action),
   imageConfig: (action) => ipcRenderer.invoke("studio:image-config", action),
   generateImage: (request) =>
     ipcRenderer.invoke("studio:image-generate", request),

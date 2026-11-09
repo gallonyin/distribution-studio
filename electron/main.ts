@@ -1,3 +1,5 @@
+import { CredentialVault } from "./credential-vault";
+import { vaultActionSchema } from "../src/vault-domain";
 import { ImageConfigStore } from "./image-config";
 import { generateImage } from "./image-api";
 import {
@@ -15,6 +17,7 @@ import {
   ClipboardItem,
   Menu,
   safeStorage,
+  screen,
 } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,6 +45,93 @@ if (!app.requestSingleInstanceLock()) app.quit();
 let main: BrowserWindow;
 let store: Store;
 let publisher: Publisher;
+let vault: CredentialVault;
+const helpers = new Map<string, { win: BrowserWindow; url: string }>();
+let copiedSecret: string | undefined;
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+async function copyCredential(value: string) {
+  await clipboard.writeText(value);
+  copiedSecret = value;
+  if (copyTimer) clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => void clearCopiedSecret(), 30000);
+  copyTimer.unref();
+}
+async function clearCopiedSecret() {
+  const expected = copiedSecret;
+  if (!expected) return;
+  try {
+    if ((await clipboard.readText()) === expected && copiedSecret === expected)
+      await clipboard.clear();
+  } catch {
+    /* Never log clipboard data. */
+  } finally {
+    if (copiedSecret === expected) copiedSecret = undefined;
+  }
+}
+let quitting = false;
+app.on("before-quit", (e) => {
+  if (copiedSecret && !quitting) {
+    e.preventDefault();
+    quitting = true;
+    void clearCopiedSecret().finally(() => app.quit());
+  }
+});
+function showLoginHelper(id: string, parent: BrowserWindow) {
+  const current = helpers.get(id);
+  if (current && !current.win.isDestroyed()) {
+    current.win.show();
+    return;
+  }
+  const bounds = parent.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const win = new BrowserWindow({
+    parent,
+    width: 370,
+    height: 560,
+    minWidth: 330,
+    minHeight: 420,
+    x: Math.max(
+      area.x,
+      Math.min(bounds.x + bounds.width - 30, area.x + area.width - 370),
+    ),
+    y: Math.max(area.y, Math.min(bounds.y + 70, area.y + area.height - 560)),
+    title: "登录快捷卡片",
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+  const base =
+    !app.isPackaged && process.env.STUDIO_DEV_URL
+      ? process.env.STUDIO_DEV_URL
+      : pathToFileURL(rendererPath).href;
+  const url = new URL(base);
+  url.hash = `login-helper=${id}`;
+  helpers.set(id, { win, url: url.href });
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (e) => e.preventDefault());
+  win.webContents.on("will-redirect", (e) => e.preventDefault());
+  const closeHelper = () => {
+    if (!win.isDestroyed()) win.destroy();
+  };
+  parent.once("closed", closeHelper);
+  win.on("closed", () => {
+    parent.removeListener("closed", closeHelper);
+    helpers.delete(id);
+  });
+  win.once("ready-to-show", () => {
+    if (!win.isDestroyed()) win.show();
+  });
+  void win.loadURL(url.href).catch(() => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+}
+
 const rendererPath = path.join(__dirname, "../dist/index.html");
 function trusted(event: Electron.IpcMainInvokeEvent) {
   const expected =
@@ -283,9 +373,10 @@ async function command(input: unknown) {
       break;
     case "account.delete":
       await publisher.removeAccount(c.id);
+      vault.remove(c.id);
       break;
     case "account.open":
-      await publisher.open(c.id);
+      await publisher.open(c.id, undefined, true);
       break;
     case "account.checkAll":
       await publisher.checkAll();
@@ -438,9 +529,14 @@ app.whenReady().then(async () => {
       )
       .join(" ");
     store = new Store(app.getPath("userData"), send);
+    vault = new CredentialVault(store.directory, safeStorage);
     const imageConfig = new ImageConfigStore(store.directory, safeStorage);
     let imageBusy = false;
-    publisher = new Publisher(store, path.join(__dirname, "inject.js"));
+    publisher = new Publisher(
+      store,
+      path.join(__dirname, "inject.js"),
+      showLoginHelper,
+    );
     main = new BrowserWindow({
       width: 1480,
       height: 960,
@@ -583,6 +679,53 @@ app.whenReady().then(async () => {
       } finally {
         imageBusy = false;
       }
+    });
+    ipcMain.handle("studio:vault", async (e, input) => {
+      const helper = [...helpers.entries()].find(
+        ([, h]) =>
+          !h.win.isDestroyed() &&
+          h.win.webContents === e.sender &&
+          e.senderFrame === h.win.webContents.mainFrame &&
+          e.senderFrame.url === h.url,
+      );
+      if (!helper) trusted(e);
+      let action;
+      try {
+        action = vaultActionSchema.parse(input);
+      } catch {
+        throw Error("账号资料请求格式不正确。");
+      }
+      const accountId =
+        action.type === "save"
+          ? action.record.accountId
+          : "accountId" in action
+            ? action.accountId
+            : undefined;
+      if (
+        helper &&
+        (action.type === "save" || (accountId && accountId !== helper[0]))
+      )
+        throw Error("登录卡片只能访问当前账号。");
+      if (accountId && !store.state.accounts.some((a) => a.id === accountId))
+        throw Error("账号不存在。");
+      const ids = helper ? [helper[0]] : store.state.accounts.map((a) => a.id);
+      if (action.type === "list")
+        return {
+          ...vault.view(ids),
+          accounts: store.state.accounts
+            .filter((a) => ids.includes(a.id))
+            .map(({ id, name, platform }) => ({ id, name, platform })),
+        };
+      if (action.type === "save") {
+        vault.save(action.record);
+        return vault.view(ids);
+      }
+      if (action.type === "reveal")
+        return { password: vault.secret(action.accountId, "password") };
+      const value = vault.secret(action.accountId, action.field);
+      if (!value) throw Error("尚未填写该项资料。");
+      await copyCredential(value);
+      return { copied: true };
     });
     ipcMain.handle("studio:bootstrap", (e) => {
       trusted(e);

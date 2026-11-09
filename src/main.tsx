@@ -1,3 +1,4 @@
+import { AccountVault } from "./AccountVault";
 import { ImageSettings, ImageGenerator } from "./ImageTools";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
@@ -46,7 +47,7 @@ import {
   type Asset,
 } from "./domain";
 import "./styles.css";
-type View = "articles" | "jobs" | "accounts" | "assets" | "settings";
+type View = "articles" | "jobs" | "accounts" | "assets" | "settings" | "vault";
 const initial: State = {
   version: 1,
   articles: [],
@@ -332,6 +333,7 @@ function App() {
     ["articles", FileText, "内容工作台"],
     ["jobs", Send, "分发任务"],
     ["accounts", Users, "平台账号"],
+    ["vault", BookOpen, "账号资料表"],
     ["assets", Images, "素材库"],
     ["settings", Settings, "设置与备份"],
   ];
@@ -1022,6 +1024,7 @@ function App() {
               </button>
             </section>
             <button
+              className="account-check-all"
               disabled={busy}
               onClick={() => act({ type: "account.checkAll" })}
             >
@@ -1179,7 +1182,11 @@ function App() {
                       title="删除账号及登录会话"
                       disabled={busy}
                       onClick={() => {
-                        if (window.confirm("移除账号并清除其本地登录会话？"))
+                        if (
+                          window.confirm(
+                            "移除账号并清除其本地登录会话和已保存的登录资料？",
+                          )
+                        )
                           void act({ type: "account.delete", id: a.id });
                       }}
                     >
@@ -1296,6 +1303,7 @@ function App() {
             )}
           </>
         )}
+        {view === "vault" && <AccountVault />}
         {view === "settings" && (
           <>
             <section className="page-heading">
@@ -1757,4 +1765,7 @@ function ImageLightbox({
     </dialog>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+const helperId = location.hash.match(/^#login-helper=([a-f0-9-]{36})$/)?.[1];
+createRoot(document.getElementById("root")!).render(
+  helperId ? <AccountVault helperId={helperId} /> : <App />,
+);

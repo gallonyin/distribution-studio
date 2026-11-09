@@ -20,6 +20,8 @@ image-history/
 # Local workspace data and recoverable deleted images
 workspace.json
 workspace.json.*
+account-vault.encrypted.json
+account-vault.encrypted.json.*
 deleted-assets/
 .studio-data/
 # Screenshot containing this machine’s service configuration

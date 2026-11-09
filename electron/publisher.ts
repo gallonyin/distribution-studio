@@ -85,6 +85,7 @@ export class Publisher {
   constructor(
     private store: Store,
     private bundlePath: string,
+    private loginHelper?: (id: string, win: BrowserWindow) => void,
   ) {}
   start() {
     this.timer = setInterval(() => void this.tick(), 1500);
@@ -97,13 +98,18 @@ export class Publisher {
     if (!a) throw Error("账号不存在");
     return a;
   }
-  async open(id: string, execution = new Execution()): Promise<BrowserWindow> {
+  async open(
+    id: string,
+    execution = new Execution(),
+    withHelper = false,
+  ): Promise<BrowserWindow> {
     execution.check();
     const a = this.account(id);
     let win = this.windows.get(id);
     if (win && !win.isDestroyed()) {
       win.show();
       win.focus();
+      if (withHelper) this.loginHelper?.(id, win);
       return win;
     }
     const partition = `persist:account-${a.id}`;
@@ -234,6 +240,7 @@ export class Publisher {
     if (process.platform === "darwin")
       win.on("focus", () => Menu.setApplicationMenu(platformMenu));
     this.windows.set(id, win);
+    if (withHelper) this.loginHelper?.(id, win);
     win.on("closed", () => this.windows.delete(id));
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let ready!: () => void;
