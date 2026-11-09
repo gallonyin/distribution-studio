@@ -1,4 +1,9 @@
 import { BrowserWindow, session } from "electron";
+import { applyChromeIdentity } from "./browser-identity";
+import {
+  platformNavigationUrl,
+  platformNavigationFilters,
+} from "./platform-navigation";
 import type { Account } from "../src/domain";
 import { platforms, allowedPlatformUrl } from "../src/domain";
 import {
@@ -20,7 +25,8 @@ const probe = `(() => {
  const body = fields.some(e => e !== titleEl && !/标题|title/i.test(label(e)) && (e.isContentEditable || /正文|内容|markdown|content/i.test(label(e)))) || Object.values(globalThis.UE_V2?.instants || {}).some(e => e?.isReady && e?.body && typeof e.getContentTxt === "function");
  const password = inputs.some(e => e.type === 'password');
  const phone = inputs.some(e => /手机号|验证码|邮箱号/.test(e.placeholder || ''));
- return { url: location.href, text, editor: title && body, loginForm: !body && (password || (phone && /登录/.test(text))) };
+ const accountControl = [...document.querySelectorAll('.weui-desktop-account__info .acount_box-nickname, .weui-desktop-account__nickname, .user-info .user_avatar, .user-info-wrap.has-more')].some(visible);
+ return { url: location.href, text, accountControl, editor: title && body, loginForm: !body && (password || (phone && /登录/.test(text))) };
 })()`;
 async function readPage(
   win: BrowserWindow,
@@ -38,8 +44,16 @@ async function readPage(
           text: string;
           editor: boolean;
           loginForm: boolean;
+          accountControl: boolean;
         };
-        return pageSignal(a.platform, s.url, s.text, s.editor, s.loginForm);
+        return pageSignal(
+          a.platform,
+          s.url,
+          s.text,
+          s.editor,
+          s.loginForm,
+          s.accountControl,
+        );
       } catch {
         return null;
       }
@@ -64,6 +78,11 @@ export async function checkAccountHealth(
   };
   if (a.platform === "web") return fallback;
   // A single deadline includes HTTP, loading and all DOM probes; hidden windows are always destroyed.
+  let identity: HealthResult | undefined;
+  let loadFailure: string | undefined;
+  const unconfirmed = () =>
+    identity ??
+    (loadFailure ? { ...fallback, message: loadFailure } : fallback);
   const abort = new AbortController();
   let hidden: BrowserWindow | undefined;
   let deadline: ReturnType<typeof setTimeout>;
@@ -86,12 +105,17 @@ export async function checkAccountHealth(
         const result = (
           a.platform === "bilibili" ? bilibiliIdentity : zhihuIdentity
         )(response.status, await response.json());
-        if (result) return result;
+        if (
+          result?.status === "needs_login" ||
+          (result && a.platform === "bilibili")
+        )
+          return result;
+        if (result) identity = result;
       } catch {
         /* No credential inference from errors, 403 or captcha. */
       }
     }
-    if (abort.signal.aborted) return fallback;
+    if (abort.signal.aborted) return unconfirmed();
     // Read-only entry request is sufficient for explicit login redirects; SPA shells remain unknown.
     try {
       const response = await ses.fetch(platforms[a.platform].url, {
@@ -112,7 +136,7 @@ export async function checkAccountHealth(
     } catch {
       /* fall back to a bounded background browser */
     }
-    if (abort.signal.aborted) return fallback;
+    if (abort.signal.aborted) return unconfirmed();
     hidden = new BrowserWindow({
       show: false,
       webPreferences: {
@@ -124,6 +148,19 @@ export async function checkAccountHealth(
         backgroundThrottling: false,
       },
     });
+    const filters = platformNavigationFilters(a.platform);
+    if (filters.length)
+      ses.webRequest.onBeforeRequest({ urls: filters }, (details, cb) => {
+        const target =
+          details.resourceType === "mainFrame" && details.method === "GET"
+            ? platformNavigationUrl(a.platform, details.url)
+            : undefined;
+        cb(target && target !== details.url ? { redirectURL: target } : {});
+      });
+    await hidden.loadURL("about:blank");
+    if (abort.signal.aborted || hidden.isDestroyed()) return unconfirmed();
+    await applyChromeIdentity(hidden);
+    if (abort.signal.aborted || hidden.isDestroyed()) return unconfirmed();
     hidden.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     hidden.webContents.on("will-navigate", (e, url) => {
       if (!allowedPlatformUrl(a.platform, url)) e.preventDefault();
@@ -135,21 +172,43 @@ export async function checkAccountHealth(
       cb(false),
     );
     hidden.webContents.on("will-attach-webview", (e) => e.preventDefault());
+    hidden.webContents.on(
+      "did-fail-load",
+      (_event, code, _description, _url, isMainFrame) => {
+        if (isMainFrame && code !== -3)
+          loadFailure = `平台页面加载失败（网络错误 ${code}），暂未确认登录`;
+      },
+    );
+    let httpRejected = false;
+    hidden.webContents.on("did-navigate", (_event, _url, httpResponseCode) => {
+      if (httpResponseCode >= 400) {
+        httpRejected = true;
+        loadFailure = `平台页面返回 HTTP ${httpResponseCode}，暂未确认登录`;
+      }
+    });
     void hidden.loadURL(platforms[a.platform].url).catch(() => {});
     while (!abort.signal.aborted && !hidden.isDestroyed()) {
+      if (httpRejected) return { ...fallback, message: loadFailure! };
       const result = await readPage(hidden, a);
       if (result) return result;
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
-    return fallback;
+    return unconfirmed();
   };
   try {
     return await Promise.race([
       work(),
       new Promise<HealthResult>((resolve) => {
         deadline = setTimeout(() => {
+          if (
+            !loadFailure &&
+            hidden &&
+            !hidden.isDestroyed() &&
+            hidden.webContents.isLoading()
+          )
+            loadFailure = "平台页面加载超时，暂未确认登录";
           abort.abort();
-          resolve(fallback);
+          resolve(unconfirmed());
         }, 16000);
       }),
     ]);

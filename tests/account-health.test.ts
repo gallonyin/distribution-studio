@@ -75,6 +75,46 @@ describe("account health evidence", () => {
       bilibiliIdentity(403, { code: 0, data: { isLogin: true, mid: 123 } }),
     ).toBeNull();
   });
+  it("requires account controls, backend host/path and navigation before confirming a shell", () => {
+    for (const [platform, url, text] of [
+      ["wechat", "https://mp.weixin.qq.com/cgi-bin/home", "新的创作 内容管理"],
+      [
+        "xiaohongshu",
+        "https://creator.xiaohongshu.com/publish/publish",
+        "发布笔记 笔记管理",
+      ],
+      [
+        "sohu",
+        "https://mp.sohu.com/mpfe/v4/contentManagement/first/page",
+        "账号信息",
+      ],
+    ] as const) {
+      expect(pageSignal(platform, url, text, false, false, true)?.status).toBe(
+        "authenticated",
+      );
+      expect(pageSignal(platform, url, text)).toBeNull();
+      expect(
+        pageSignal(
+          platform,
+          url.replace(new URL(url).hostname, "public.example"),
+          text,
+          false,
+          false,
+          true,
+        ),
+      ).toBeNull();
+      expect(
+        pageSignal(platform, url, text + " 安全验证", false, false, true)
+          ?.status,
+      ).toBe("unknown");
+      expect(pageSignal(platform, url, text, false, true, true)?.status).toBe(
+        "needs_login",
+      );
+      expect(pageSignal(platform, url, text, true, false, true)?.status).toBe(
+        "editor_ready",
+      );
+    }
+  });
   it("never returns query tokens as a result", () => {
     expect(
       JSON.stringify(

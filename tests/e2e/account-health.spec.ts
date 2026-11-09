@@ -172,3 +172,87 @@ test("account checks stay independent and share a three-request concurrency limi
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
+
+test("recognizes logged-in backend shells and continues past Zhihu identity to its editor", async () => {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "studio-health-shell-"));
+  const app = await electron.launch({
+    args: ["."],
+    env: { ...process.env, STUDIO_DATA_DIR: data },
+  });
+  try {
+    const page = await app.firstWindow();
+    await expect(page.getByText("本地工作区已连接")).toBeVisible();
+    const accounts = await page.evaluate(async () => {
+      for (const platform of [
+        "wechat",
+        "xiaohongshu",
+        "sohu",
+        "zhihu",
+        "jianshu",
+      ] as const)
+        await window.studio.command({
+          type: "account.add",
+          platform,
+          name: platform,
+        });
+      return (await window.studio.bootstrap()).state.accounts;
+    });
+    await app.evaluate(async ({ session }, accounts) => {
+      for (const account of accounts) {
+        await session
+          .fromPartition(`persist:account-${account.id}`)
+          .protocol.handle("https", (request) => {
+            const url = new URL(request.url);
+            if (request.method !== "GET")
+              return new Response("NO WRITES", { status: 405 });
+            if (account.platform === "jianshu")
+              return new Response(
+                '<input placeholder="标题"><div contenteditable="true">body</div>',
+                {
+                  status: 403,
+                  headers: { "Content-Type": "text/html; charset=utf-8" },
+                },
+              );
+            if (url.pathname === "/api/v4/me")
+              return Response.json({ id: "fixture", name: "fixture" });
+            if (account.platform === "wechat" && url.pathname === "/")
+              return Response.redirect("https://mp.weixin.qq.com/cgi-bin/home");
+            const html =
+              account.platform === "wechat"
+                ? '<div class="weui-desktop-account__info"><span class="acount_box-nickname">fixture</span></div>新的创作 内容管理'
+                : account.platform === "xiaohongshu"
+                  ? '<div class="user-info"><img class="user_avatar" style="width:30px;height:30px"></div>发布笔记 笔记管理 上传图文'
+                  : account.platform === "sohu"
+                    ? '<div class="user-info-wrap has-more"><section class="user-info">fixture</section></div>账号信息'
+                    : '<textarea placeholder="请输入标题"></textarea><div contenteditable="true" style="height:100px"></div>';
+            return new Response(`<html><body>${html}</body></html>`, {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+            });
+          });
+      }
+    }, accounts);
+    const state = await page.evaluate(() =>
+      window.studio.command({ type: "account.checkAll" }),
+    );
+    for (const platform of ["wechat", "xiaohongshu", "sohu"])
+      expect(state.accounts.find((a) => a.platform === platform)?.status).toBe(
+        "authenticated",
+      );
+    expect(state.accounts.find((a) => a.platform === "zhihu")?.status).toBe(
+      "editor_ready",
+    );
+    expect(state.accounts.find((a) => a.platform === "jianshu")).toMatchObject({
+      status: "unknown",
+      checkMessage: expect.stringContaining("HTTP 403"),
+    });
+    expect(state.jobs).toHaveLength(0);
+    expect(
+      await app.evaluate(
+        ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
+      ),
+    ).toBe(1);
+  } finally {
+    await app.close();
+    fs.rmSync(data, { recursive: true, force: true });
+  }
+});

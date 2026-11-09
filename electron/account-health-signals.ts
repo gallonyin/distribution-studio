@@ -10,6 +10,7 @@ export function pageSignal(
   text: string,
   editor = false,
   loginForm = false,
+  accountControl = false,
 ): HealthResult | null {
   let u: URL;
   try {
@@ -44,15 +45,32 @@ export function pageSignal(
       method: "page",
       message: "已识别标题和正文编辑区；未执行填充",
     };
+  const backendAccount =
+    accountControl &&
+    ((platform === "wechat" &&
+      u.hostname === "mp.weixin.qq.com" &&
+      u.pathname === "/cgi-bin/home" &&
+      /新的创作/.test(text) &&
+      /内容管理/.test(text)) ||
+      (platform === "xiaohongshu" &&
+        u.hostname === "creator.xiaohongshu.com" &&
+        u.pathname.startsWith("/publish/") &&
+        /发布笔记/.test(text) &&
+        /笔记管理/.test(text)) ||
+      (platform === "sohu" &&
+        u.hostname === "mp.sohu.com" &&
+        u.pathname.startsWith("/mpfe/v4/contentManagement/")));
   if (
-    platform === "wechat" &&
-    /退出/.test(text) &&
-    /内容管理|新的创作|草稿箱/.test(text)
+    backendAccount ||
+    (platform === "wechat" &&
+      u.hostname === "mp.weixin.qq.com" &&
+      /退出/.test(text) &&
+      /内容管理|新的创作|草稿箱/.test(text))
   )
     return {
       status: "authenticated",
       method: "page",
-      message: "后台已登录，尚未验证编辑器",
+      message: "已识别后台账号区域与创作导航；尚未验证标题和正文编辑器",
     };
   if (platform === "sohu" && /登录\/注册/.test(text))
     return {
