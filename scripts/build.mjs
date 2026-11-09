@@ -1,4 +1,15 @@
 import { build } from "esbuild";
+import { copyFileSync, mkdirSync } from "node:fs";
+mkdirSync("dist-electron", { recursive: true });
+copyFileSync("electron/toolbar.html", "dist-electron/toolbar.html");
+await build({
+  entryPoints: ["electron/toolbar-preload.ts"],
+  outfile: "dist-electron/toolbar-preload.cjs",
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  external: ["electron"],
+});
 await build({
   entryPoints: ["electron/main.ts"],
   outfile: "dist-electron/main.cjs",

@@ -14,6 +14,7 @@ import { makePreview } from "./content";
 import type { FillRequest, FillResult } from "./inject";
 import { Execution } from "./execution";
 import { randomUUID } from "node:crypto";
+import { attachPlatformToolbar } from "./platform-toolbar";
 import {
   platformNavigationUrl,
   platformNavigationFilters,
@@ -71,6 +72,7 @@ function frameWasDisposed(error: unknown) {
   );
 }
 export class Publisher {
+  private filledWindows = new WeakSet<BrowserWindow>();
   windows = new Map<string, BrowserWindow>();
   busy = false;
   private active?: {
@@ -136,6 +138,8 @@ export class Publisher {
     win = new BrowserWindow({
       width: 1200,
       height: 860,
+      minWidth: 720,
+      minHeight: 480,
       title: `${a.name} · ${platforms[a.platform].name}`,
       webPreferences: {
         partition,
@@ -203,6 +207,16 @@ export class Publisher {
       return { action: "deny" };
     });
     win.webContents.on("will-attach-webview", (e) => e.preventDefault());
+    const platformWindow = win;
+    const toolbarAction = attachPlatformToolbar(
+      win,
+      a,
+      () => this.loginHelper?.(id, platformWindow),
+      () => this.filledWindows.has(platformWindow),
+    );
+    win.webContents.on("did-navigate", () =>
+      this.filledWindows.delete(platformWindow),
+    );
     const platformMenu = Menu.buildFromTemplate([
       { label: "分发工作台", submenu: [{ role: "about" }, { role: "quit" }] },
       {
@@ -211,14 +225,15 @@ export class Publisher {
           {
             label: "返回",
             click: () => {
-              if (win!.webContents.navigationHistory.canGoBack())
-                win!.webContents.navigationHistory.goBack();
+              void toolbarAction("back");
             },
           },
-          { label: "重新加载", click: () => win!.reload() },
+          { label: "前进", click: () => void toolbarAction("forward") },
+          { label: "重新加载", click: () => void toolbarAction("reload") },
+          { label: "平台后台", click: () => void toolbarAction("home") },
           {
             label: "打开创作入口",
-            click: () => navigate(platforms[a.platform].url),
+            click: () => void toolbarAction("write"),
           },
           { type: "separator" },
           { role: "close" },
@@ -307,6 +322,11 @@ export class Publisher {
             "编辑器脚本响应超时，请检查平台草稿后继续。",
           );
           filled = r as FillResult;
+          if (
+            request.mode === "fill" &&
+            (filled.titleFilled || filled.bodyFilled)
+          )
+            this.filledWindows.add(win);
         } catch (e) {
           execution.check();
           if (frame === mainFrame || frameWasDisposed(e)) throw e;

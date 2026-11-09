@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f3f6f0;
+        color: #30483b;
+        font:
+          13px -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      nav {
+        height: 52px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #dce4d7;
+      }
+      button {
+        font: inherit;
+        white-space: nowrap;
+        border: 1px solid #d7e0d1;
+        background: white;
+        color: inherit;
+        border-radius: 6px;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #e7efdf;
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      button:focus-visible {
+        outline: 2px solid #2b795c;
+      }
+      #identity {
+        flex: 1;
+        min-width: 0;
+        padding: 0 10px;
+        display: flex;
+        gap: 12px;
+      }
+      #label,
+      #host {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #host {
+        color: #7b8775;
+        font-size: 11px;
+        align-self: center;
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="平台导航">
+      <button
+        data-action="back"
+        aria-label="后退"
+        title="后退（⌘[ / Alt+←）"
+        disabled
+      >
+        ←
+      </button>
+      <button
+        data-action="forward"
+        aria-label="前进"
+        title="前进（⌘] / Alt+→）"
+        disabled
+      >
+        →
+      </button>
+      <button data-action="reload" data-refresh title="刷新（⌘R / Ctrl+R）">
+        刷新
+      </button>
+      <button data-action="home">平台后台</button
+      ><button data-action="write">写文章</button>
+      <div id="identity"><span id="label"></span><span id="host"></span></div>
+      <button data-action="helper">登录资料</button>
+    </nav>
+  </body>
+</html>
