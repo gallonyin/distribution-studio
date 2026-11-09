@@ -1633,3 +1633,17 @@ p {
   margin-top: 20px;
   line-height: 1.7;
 }
+
+.account-check-spinner {
+  animation: account-check-spin 1s linear infinite;
+}
+@keyframes account-check-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-check-spinner {
+    animation: none;
+  }
+}

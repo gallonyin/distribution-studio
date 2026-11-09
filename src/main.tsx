@@ -97,6 +97,31 @@ function App() {
       id: string;
       position: "before" | "after";
     } | null>(null);
+  const [checkingAccounts, setCheckingAccounts] = useState<Set<string>>(
+    new Set(),
+  );
+  const checkingRef = useRef(new Set<string>());
+  async function checkAccount(id: string) {
+    if (checkingRef.current.has(id)) return;
+    checkingRef.current.add(id);
+    setCheckingAccounts(new Set(checkingRef.current));
+    try {
+      const next = await window.studio.command({ type: "account.check", id });
+      // Store pushes carry every account's latest result. A concurrent command's
+      // response must not overwrite newer state from another operation.
+      const account = next.accounts.find((a) => a.id === id);
+      notify(
+        account?.status === "editor_ready"
+          ? "已识别标题与正文编辑器"
+          : account?.checkMessage || "暂未确认，请手动打开平台",
+      );
+    } catch (error) {
+      notify(String(error).replace(/^Error:.*?Error: /, ""), true);
+    } finally {
+      checkingRef.current.delete(id);
+      setCheckingAccounts(new Set(checkingRef.current));
+    }
+  }
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const draftRef = useRef(draft);
@@ -1025,8 +1050,15 @@ function App() {
             </section>
             <button
               className="account-check-all"
-              disabled={busy}
-              onClick={() => act({ type: "account.checkAll" })}
+              disabled={
+                busy ||
+                (state.accounts.length > 0 &&
+                  state.accounts.every((a) => checkingAccounts.has(a.id)))
+              }
+              onClick={() => {
+                for (const account of state.accounts)
+                  void checkAccount(account.id);
+              }}
             >
               批量快速检测全部账号
             </button>
@@ -1153,29 +1185,19 @@ function App() {
                     </button>
                     <button
                       className="small"
-                      disabled={busy}
-                      onClick={async () => {
-                        const s = await act({
-                          type: "account.check",
-                          id: a.id,
-                        });
-                        if (s) {
-                          // The command response is the final persisted result.
-                          // Apply it directly as well as accepting store pushes so
-                          // the card cannot remain stale after a successful probe.
-                          setState(s);
-                          notify(
-                            s.accounts.find((x) => x.id === a.id)?.status ===
-                              "editor_ready"
-                              ? "已识别标题与正文编辑器"
-                              : s.accounts.find((x) => x.id === a.id)
-                                  ?.checkMessage || "暂未确认，请手动打开平台",
-                          );
-                        }
-                      }}
+                      disabled={busy || checkingAccounts.has(a.id)}
+                      aria-busy={checkingAccounts.has(a.id)}
+                      onClick={() => void checkAccount(a.id)}
                     >
-                      <RefreshCw size={14} />
-                      检查
+                      <RefreshCw
+                        size={14}
+                        className={
+                          checkingAccounts.has(a.id)
+                            ? "account-check-spinner"
+                            : undefined
+                        }
+                      />
+                      {checkingAccounts.has(a.id) ? "检查中" : "检查"}
                     </button>
                     <button
                       className="danger-icon"

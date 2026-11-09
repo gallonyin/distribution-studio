@@ -76,3 +76,99 @@ test("batch health uses isolated sessions, retries delayed editors, and never op
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
+
+test("account checks stay independent and share a three-request concurrency limit", async () => {
+  const data = fs.mkdtempSync(
+    path.join(os.tmpdir(), "studio-health-parallel-"),
+  );
+  const app = await electron.launch({
+    args: ["."],
+    env: { ...process.env, STUDIO_DATA_DIR: data },
+  });
+  try {
+    const page = await app.firstWindow();
+    await expect(page.getByText("本地工作区已连接")).toBeVisible();
+    const accounts = await page.evaluate(async () => {
+      for (const name of ["A", "B", "C", "D", "E"])
+        await window.studio.command({
+          type: "account.add",
+          platform: "bilibili",
+          name,
+        });
+      return (await window.studio.bootstrap()).state.accounts;
+    });
+    await app.evaluate(async ({ session }, accounts) => {
+      const fixture = { active: 0, max: 0, started: 0, release: false };
+      (globalThis as any).healthFixture = fixture;
+      for (const account of accounts)
+        await session
+          .fromPartition(`persist:account-${account.id}`)
+          .protocol.handle("https", async () => {
+            fixture.active++;
+            fixture.started++;
+            fixture.max = Math.max(fixture.max, fixture.active);
+            try {
+              while (!fixture.release)
+                await new Promise((resolve) => setTimeout(resolve, 20));
+              return Response.json({
+                code: 0,
+                data: { isLogin: true, mid: 123 },
+              });
+            } finally {
+              fixture.active--;
+            }
+          });
+    }, accounts);
+    await page.getByRole("button", { name: "平台账号", exact: true }).click();
+    const cards = page.locator(".account-card");
+    await cards
+      .nth(0)
+      .getByRole("button", { name: "检查", exact: true })
+      .click();
+    await expect(
+      cards.nth(0).getByRole("button", { name: "检查中", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      cards.nth(0).getByRole("button", { name: "登录 / 打开", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      cards.nth(1).getByRole("button", { name: "检查", exact: true }),
+    ).toBeEnabled();
+    await cards
+      .nth(1)
+      .getByRole("button", { name: "检查", exact: true })
+      .click();
+    await expect
+      .poll(() => app.evaluate(() => (globalThis as any).healthFixture.started))
+      .toBe(2);
+    // Batch adds the remaining accounts and does not submit A/B twice.
+    await page.getByRole("button", { name: "批量快速检测全部账号" }).click();
+    await expect(
+      page.getByRole("button", { name: "检查中", exact: true }),
+    ).toHaveCount(5);
+    await expect
+      .poll(() => app.evaluate(() => (globalThis as any).healthFixture.started))
+      .toBe(3);
+    await expect(
+      page.getByRole("button", { name: "添加账号", exact: true }),
+    ).toBeEnabled();
+    await app.evaluate(() => {
+      (globalThis as any).healthFixture.release = true;
+    });
+    await expect(
+      page.locator(".account-status").filter({ hasText: "已登录" }),
+    ).toHaveCount(5);
+    await expect(
+      page.getByRole("button", { name: "检查", exact: true }),
+    ).toHaveCount(5);
+    expect(
+      await app.evaluate(() => {
+        const { max, started } = (globalThis as any).healthFixture;
+        return { max, started };
+      }),
+    ).toEqual({ max: 3, started: 5 });
+  } finally {
+    await app.close();
+    fs.rmSync(data, { recursive: true, force: true });
+  }
+});

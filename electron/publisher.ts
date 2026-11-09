@@ -353,23 +353,34 @@ export class Publisher {
   }
   private healthChecks = new Map<string, Promise<boolean>>();
   private allHealth?: Promise<void>;
+  private activeHealthChecks = 0;
+  private healthWaiters: Array<() => void> = [];
   check(id: string): Promise<boolean> {
     const current = this.healthChecks.get(id);
     if (current) return current;
     const task = (async () => {
-      const a = this.account(id);
-      const result = await checkAccountHealth(a, this.windows.get(id));
-      this.store.change((s) => {
-        const target = s.accounts.find((x) => x.id === id);
-        if (!target) return;
-        Object.assign(target, {
-          status: result.status,
-          checkedAt: new Date().toISOString(),
-          checkMethod: result.method,
-          checkMessage: result.message,
+      if (this.activeHealthChecks < 3) this.activeHealthChecks++;
+      else
+        await new Promise<void>((resolve) => this.healthWaiters.push(resolve));
+      try {
+        const a = this.account(id);
+        const result = await checkAccountHealth(a, this.windows.get(id));
+        this.store.change((s) => {
+          const target = s.accounts.find((x) => x.id === id);
+          if (!target) return;
+          Object.assign(target, {
+            status: result.status,
+            checkedAt: new Date().toISOString(),
+            checkMethod: result.method,
+            checkMessage: result.message,
+          });
         });
-      });
-      return result.status === "editor_ready";
+        return result.status === "editor_ready";
+      } finally {
+        const next = this.healthWaiters.shift();
+        if (next) next();
+        else this.activeHealthChecks--;
+      }
     })().finally(() => this.healthChecks.delete(id));
     this.healthChecks.set(id, task);
     return task;
