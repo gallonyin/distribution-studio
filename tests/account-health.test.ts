@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   pageSignal,
   zhihuIdentity,
+  bilibiliIdentity,
   boundedMap,
 } from "../electron/account-health-signals";
 import { accountSchema } from "../src/domain";
@@ -54,6 +55,25 @@ describe("account health evidence", () => {
         true,
       )?.status,
     ).toBe("unknown");
+  });
+  it("validates Bilibili business status without treating a 200 shell or challenge as login", () => {
+    expect(
+      bilibiliIdentity(200, { code: 0, data: { isLogin: true, mid: 123 } })
+        ?.status,
+    ).toBe("authenticated");
+    expect(
+      bilibiliIdentity(200, { code: -101, data: { isLogin: false } })?.status,
+    ).toBe("needs_login");
+    for (const data of [
+      { code: 0 },
+      { code: 0, data: { isLogin: true } },
+      { code: -352 },
+      { code: 0, data: { isLogin: true, mid: "123" } },
+    ])
+      expect(bilibiliIdentity(200, data)).toBeNull();
+    expect(
+      bilibiliIdentity(403, { code: 0, data: { isLogin: true, mid: 123 } }),
+    ).toBeNull();
   });
   it("never returns query tokens as a result", () => {
     expect(

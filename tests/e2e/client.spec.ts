@@ -8,6 +8,7 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { platformIds as supportedPlatforms } from "../../src/domain";
 let client: ElectronApplication, page: Page, data: string;
 async function launch() {
   client = await electron.launch({
@@ -351,7 +352,7 @@ test("编辑、平台稿、图片、重启与导出备份", async () => {
   const { unzipSync, strFromU8 } = await import("fflate");
   const zip = unzipSync(fs.readFileSync(zipPath));
   expect(Object.keys(zip).filter((k) => k.endsWith("article.md"))).toHaveLength(
-    10,
+    supportedPlatforms.length,
   );
   expect(strFromU8(zip["wechat/article.md"])).toContain("公众号的专用标题");
   expect(Object.keys(zip).some((k) => k.startsWith("assets/"))).toBe(true);
@@ -515,7 +516,7 @@ test("已有草稿不覆盖", async () => {
   await expect(remote.locator("[contenteditable]")).toHaveText("旧正文");
 });
 
-test("九个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任务链路", async () => {
+test("十个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任务链路", async () => {
   const setup = await page.evaluate(async () => {
     await window.studio.command({ type: "queue.pause", paused: true });
     const platformIds = [
@@ -528,6 +529,7 @@ test("九个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
       "toutiao",
       "netease",
       "jianshu",
+      "bilibili",
     ] as const;
     let s;
     for (const platform of platformIds)
@@ -542,7 +544,7 @@ test("九个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
       type: "article.save",
       article: {
         id,
-        title: "九平台兼容检查",
+        title: "十平台兼容检查",
         markdown: "## 一个步骤\n\n正文与 **重点**。",
         collection: "其他",
         tags: [],
@@ -578,6 +580,9 @@ test("九个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
           if (a.platform === "sohu" || a.platform === "netease")
             body =
               '<div class="ql-editor" contenteditable="true" style="height:300px"></div>';
+          if (a.platform === "bilibili")
+            body =
+              '<div class="ql-editor" contenteditable="true" style="height:300px"></div><button onclick="window.__published=true">发布</button>';
           if (a.platform === "jianshu")
             body =
               '<textarea id="content" style="height:300px;width:500px"></textarea>';
@@ -613,6 +618,17 @@ test("九个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
       { timeout: 45000 },
     )
     .toEqual(setup.accounts.map((a) => [a.platform, "awaiting_review"]).sort());
+  const bili = client
+    .windows()
+    .find((p) => p.url().includes("member.bilibili.com"))!;
+  await expect(bili).toHaveURL(
+    "https://member.bilibili.com/platform/upload/text",
+  );
+  await expect(bili.locator("textarea")).toHaveValue("十平台兼容检查");
+  await expect(bili.locator(".ql-editor strong")).toHaveText("重点");
+  expect(
+    await bili.evaluate(() => (window as any).__published),
+  ).toBeUndefined();
   const csdn = client.windows().find((p) => p.url().includes("mp.csdn.net"))!;
   await expect(csdn.frameLocator("iframe").locator("body")).toContainText(
     "正文与",

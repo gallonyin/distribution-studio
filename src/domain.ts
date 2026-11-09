@@ -15,6 +15,7 @@ export const platformIds = [
   "toutiao",
   "netease",
   "jianshu",
+  "bilibili",
   "web",
 ] as const;
 export type PlatformId = (typeof platformIds)[number];
@@ -110,6 +111,15 @@ export const platforms: Record<
     url: "https://www.jianshu.com/writer",
     hosts: ["jianshu.com"],
     hint: "选择文集并新建文章，再执行填充。",
+    group: "补充分发",
+  },
+  bilibili: {
+    name: "Bilibili 图文",
+    short: "B",
+    color: "#00a1d6",
+    url: "https://member.bilibili.com/platform/upload/text",
+    hosts: ["member.bilibili.com", "passport.bilibili.com", "www.bilibili.com"],
+    hint: "图文文章投稿（非视频）；检查封面、分区、标签、图片转存和排版，正式发布需人工确认。",
     group: "补充分发",
   },
   web: {

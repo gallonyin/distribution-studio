@@ -17,6 +17,7 @@ test("batch health uses isolated sessions, retries delayed editors, and never op
         "baijiahao",
         "toutiao",
         "csdn",
+        "bilibili",
       ] as const)
         await window.studio.command({
           type: "account.add",
@@ -31,6 +32,11 @@ test("batch health uses isolated sessions, retries delayed editors, and never op
         await ses.protocol.handle("https", (request) => {
           if (request.method !== "GET")
             return new Response("NO WRITES", { status: 405 });
+          if (a.platform === "bilibili")
+            return Response.json({
+              code: 0,
+              data: { isLogin: true, mid: 123 },
+            });
           const html =
             a.platform === "wechat"
               ? "微信扫一扫，选择公众平台账号登录"
@@ -61,6 +67,9 @@ test("batch health uses isolated sessions, retries delayed editors, and never op
         ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
       ),
     ).toBe(1);
+    expect(
+      result.accounts.find((a) => a.platform === "bilibili"),
+    ).toMatchObject({ status: "authenticated", checkMethod: "api" });
     expect(result.jobs).toHaveLength(0);
   } finally {
     await app.close();

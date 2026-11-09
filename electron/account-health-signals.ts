@@ -102,3 +102,34 @@ export async function boundedMap<T>(
     }),
   );
 }
+
+// Bilibili's read-only nav endpoint uses JSON code/isLogin, not HTTP 200 alone.
+export function bilibiliIdentity(
+  status: number,
+  data: unknown,
+): HealthResult | null {
+  if (status !== 200 || !data || typeof data !== "object") return null;
+  const d = data as {
+    code?: unknown;
+    data?: { isLogin?: unknown; mid?: unknown };
+  };
+  if (d.code === -101 && d.data?.isLogin === false)
+    return {
+      status: "needs_login",
+      method: "api",
+      message: "只读身份接口确认未登录，请登录 Bilibili",
+    };
+  if (
+    d.code === 0 &&
+    d.data?.isLogin === true &&
+    typeof d.data.mid === "number" &&
+    Number.isSafeInteger(d.data.mid) &&
+    d.data.mid > 0
+  )
+    return {
+      status: "authenticated",
+      method: "api",
+      message: "Bilibili 身份接口验证通过；尚未验证图文编辑器",
+    };
+  return null;
+}

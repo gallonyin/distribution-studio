@@ -4,6 +4,7 @@ import { platforms, allowedPlatformUrl } from "../src/domain";
 import {
   pageSignal,
   zhihuIdentity,
+  bilibiliIdentity,
   type HealthResult,
 } from "./account-health-signals";
 
@@ -72,12 +73,19 @@ export async function checkAccountHealth(
       if (result) return result;
     }
     const ses = session.fromPartition(`persist:account-${a.id}`);
-    if (a.platform === "zhihu") {
+    if (a.platform === "zhihu" || a.platform === "bilibili") {
       try {
-        const response = await ses.fetch("https://www.zhihu.com/api/v4/me", {
-          signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3500)]),
-        });
-        const result = zhihuIdentity(response.status, await response.json());
+        const response = await ses.fetch(
+          a.platform === "bilibili"
+            ? "https://api.bilibili.com/x/web-interface/nav"
+            : "https://www.zhihu.com/api/v4/me",
+          {
+            signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3500)]),
+          },
+        );
+        const result = (
+          a.platform === "bilibili" ? bilibiliIdentity : zhihuIdentity
+        )(response.status, await response.json());
         if (result) return result;
       } catch {
         /* No credential inference from errors, 403 or captcha. */

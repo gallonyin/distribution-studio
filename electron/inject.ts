@@ -35,6 +35,11 @@ const titleSelectors: Record<string, string[]> = {
   sohu: ['input[placeholder*="标题"]'],
   toutiao: ['textarea[placeholder*="标题"]'],
   netease: ['input[placeholder*="标题"]'],
+  bilibili: [
+    'textarea[placeholder*="标题"]',
+    'input[placeholder*="标题"]',
+    '.title-input[contenteditable="true"]',
+  ],
   jianshu: ["input._24i7u", 'input[placeholder*="标题"]'],
 };
 const bodySelectors: Record<string, string[]> = {
@@ -63,6 +68,13 @@ const bodySelectors: Record<string, string[]> = {
   sohu: ['.ql-editor[contenteditable="true"]'],
   toutiao: ['.ProseMirror[contenteditable="true"]'],
   netease: ['.ql-editor[contenteditable="true"]', ".edui-body-container"],
+  bilibili: [
+    '.ql-editor[contenteditable="true"]',
+    '.ProseMirror[contenteditable="true"]',
+    '.tiptap[contenteditable="true"]',
+    '.editor-content[contenteditable="true"]',
+    ".edui-body-container",
+  ],
   jianshu: [
     "#arthur-editor",
     "textarea#content",

@@ -111,6 +111,11 @@ export async function makePreview(
     if (/<a /i.test(html))
       warnings.push("公众号可能限制正文外链，请检查链接可用性。");
   }
+  if (platform === "bilibili") {
+    warnings.push(
+      "Bilibili 图文文章：请在官方编辑器检查封面、分区、标签与图片转存；不会投稿视频。只有登录接口通过时，尚不代表已验证图文编辑器。",
+    );
+  }
   if (platform === "xiaohongshu") {
     if (!article.overrides.xiaohongshu)
       warnings.push("尚未创建小红书独立短稿，请压缩内容并配置配图。");
