@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { fileURLToPath } from "node:url";
-import type { BrowserWindow } from "electron";
+import type { PlatformWindow as BrowserWindow } from "../electron/platform-window";
 import { Publisher } from "../electron/publisher";
 import { Execution } from "../electron/execution";
 import type { Store } from "../electron/store";
@@ -9,6 +9,7 @@ import type { Account } from "../src/domain";
 
 vi.mock("electron", () => ({
   BrowserWindow: {},
+  BaseWindow: class {},
   Menu: {},
   session: {},
   dialog: {},

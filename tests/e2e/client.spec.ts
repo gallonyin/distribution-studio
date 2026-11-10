@@ -110,8 +110,8 @@ test("删除与批量清理已取消记录：确认、保留排队任务和重�
   });
   await page.getByRole("button", { name: "分发任务", exact: false }).click();
   await expect(page.locator(".job-card")).toHaveCount(4);
-  await client.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0].setSize(1080, 800);
+  await client.evaluate(({ BaseWindow }) => {
+    (BaseWindow.getAllWindows() as any[])[0].setSize(1080, 800);
   });
   await expect
     .poll(() =>
@@ -222,8 +222,8 @@ test("运行中取消后删除记录，迟到的平台跳转回调不报错", as
     )
     .toBe("waiting");
   // Keep a callback captured before cancellation to deterministically exercise a late event.
-  const listeners = await client.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getAllWindows().find((w) =>
+  const listeners = await client.evaluate(({ BaseWindow }) => {
+    const win = (BaseWindow.getAllWindows() as any[]).find((w) =>
       w.webContents.getURL().includes("mp.weixin.qq.com"),
     )!;
     (win as any).__lateNavigation = win.webContents.listeners(
@@ -236,8 +236,8 @@ test("运行中取消后删除记录，迟到的平台跳转回调不报错", as
     await window.studio.command({ type: "job.cancel", id });
     await window.studio.command({ type: "job.delete", id });
   }, jobId);
-  await client.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getAllWindows().find((w) =>
+  await client.evaluate(({ BaseWindow }) => {
+    const win = (BaseWindow.getAllWindows() as any[]).find((w) =>
       w.webContents.getURL().includes("mp.weixin.qq.com"),
     )!;
     for (const callback of (win as any).__lateNavigation)
@@ -293,7 +293,8 @@ test("等待编辑器期间页面跳转，重新检测后完成填充", async ()
     )
     .toBe("awaiting_review");
   const remote = client
-    .windows()
+    .context()
+    .pages()
     .find((p) => p.url().startsWith("https://mp.weixin.qq.com/"))!;
   await expect(remote.locator("#title")).toHaveValue("页面跳转填充测试");
   await expect(remote.locator(".ProseMirror")).toHaveText(
@@ -431,10 +432,13 @@ test("真实 Electron 窗口：队列填充、重复拦截与人工登记", asyn
   await expect(page.getByText("待检查发布", { exact: true })).toBeVisible({
     timeout: 30000,
   });
-  const remote = client.windows().find((p) => p !== page)!;
+  const remote = client
+    .context()
+    .pages()
+    .find((p) => p !== page)!;
   expect(
-    await client.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows().some((w) =>
+    await client.evaluate(({ BaseWindow }) =>
+      (BaseWindow.getAllWindows() as any[]).some((w) =>
         w.getTitle().includes("本地验收账号"),
       ),
     ),
@@ -511,7 +515,10 @@ test("已有草稿不覆盖", async () => {
   await expect(
     page.getByText("标题栏已有其他内容，未覆盖。", { exact: true }),
   ).toBeVisible({ timeout: 30000 });
-  const remote = client.windows().find((p) => p !== page)!;
+  const remote = client
+    .context()
+    .pages()
+    .find((p) => p !== page)!;
   await expect(remote.locator("textarea")).toHaveValue("不能覆盖的原稿");
   await expect(remote.locator("[contenteditable]")).toHaveText("旧正文");
 });
@@ -619,7 +626,8 @@ test("十个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
     )
     .toEqual(setup.accounts.map((a) => [a.platform, "awaiting_review"]).sort());
   const bili = client
-    .windows()
+    .context()
+    .pages()
     .find((p) => p.url().includes("member.bilibili.com"))!;
   await expect(bili).toHaveURL(
     "https://member.bilibili.com/platform/upload/text",
@@ -629,12 +637,16 @@ test("十个平台夹具、公众号 iframe 与 CSDN 跨域 iframe：同一任�
   expect(
     await bili.evaluate(() => (window as any).__published),
   ).toBeUndefined();
-  const csdn = client.windows().find((p) => p.url().includes("mp.csdn.net"))!;
+  const csdn = client
+    .context()
+    .pages()
+    .find((p) => p.url().includes("mp.csdn.net"))!;
   await expect(csdn.frameLocator("iframe").locator("body")).toContainText(
     "正文与",
   );
   const wechat = client
-    .windows()
+    .context()
+    .pages()
     .find((p) => p.url().includes("mp.weixin.qq.com"))!;
   await expect(wechat.frameLocator("iframe").locator("body")).toContainText(
     "正文与",
@@ -718,7 +730,10 @@ test("未登录时可暂停、继续，账号会话彼此隔离", async () => {
       { timeout: 25000 },
     )
     .toBe("needs_attention");
-  const remote = client.windows().find((p) => p !== page)!;
+  const remote = client
+    .context()
+    .pages()
+    .find((p) => p !== page)!;
   await remote.setContent(
     '<textarea placeholder="标题"></textarea><div class="public-DraftEditor-content" contenteditable="true" style="height:200px"></div>',
   );
@@ -799,7 +814,10 @@ test("正文冲突预检不先改标题；框架回滚不能误报成功", async
       { timeout: 15000 },
     )
     .toBe("needs_attention");
-  const remote = client.windows().find((p) => p !== page)!;
+  const remote = client
+    .context()
+    .pages()
+    .find((p) => p !== page)!;
   await expect(remote.locator("textarea")).toHaveValue("");
   await remote.evaluate(() => {
     const el = document.querySelector("[contenteditable]")!;
@@ -856,7 +874,7 @@ test("知乎登录旧 HTTP 返回地址升级为 HTTPS，保留账号会话", as
       });
     });
   }, accountId);
-  const opened = client.waitForEvent("window");
+  const opened = client.context().waitForEvent("page");
   await page.evaluate(
     (id) => window.studio.command({ type: "account.open", id }),
     accountId,
@@ -906,7 +924,7 @@ test("百家号 stoken 登录与注册 HTTP 回跳升级为 HTTPS", async () => 
       });
     });
   }, accountId);
-  const opened = client.waitForEvent("window");
+  const opened = client.context().waitForEvent("page");
   await page.evaluate(
     (id) => window.studio.command({ type: "account.open", id }),
     accountId,
@@ -979,7 +997,7 @@ test("平台账号窗口使用完整 Chrome 浏览器身份", async () => {
         }),
     );
   }, accountId);
-  const opened = client.waitForEvent("window");
+  const opened = client.context().waitForEvent("page");
   await page.evaluate(
     (id) => window.studio.command({ type: "account.open", id }),
     accountId,

@@ -1,6 +1,7 @@
+import { PlatformWindow } from "./platform-window";
 import { checkAccountHealth } from "./account-health";
 import { boundedMap } from "./account-health-signals";
-import { BrowserWindow, Menu, session, dialog } from "electron";
+import { Menu, session, dialog } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -26,8 +27,8 @@ function frameWasDisposed(error: unknown) {
   );
 }
 export class Publisher {
-  private filledWindows = new WeakSet<BrowserWindow>();
-  windows = new Map<string, BrowserWindow>();
+  private filledWindows = new WeakSet<PlatformWindow>();
+  windows = new Map<string, PlatformWindow>();
   busy = false;
   private active?: {
     job: Job;
@@ -41,7 +42,7 @@ export class Publisher {
   constructor(
     private store: Store,
     private bundlePath: string,
-    private loginHelper?: (id: string, win: BrowserWindow) => void,
+    private loginHelper?: (id: string, win: PlatformWindow) => void,
   ) {}
   start() {
     this.timer = setInterval(() => void this.tick(), 1500);
@@ -58,7 +59,7 @@ export class Publisher {
     id: string,
     execution = new Execution(),
     withHelper = false,
-  ): Promise<BrowserWindow> {
+  ): Promise<PlatformWindow> {
     execution.check();
     const a = this.account(id);
     let win = this.windows.get(id);
@@ -89,7 +90,7 @@ export class Publisher {
       );
     ses.setPermissionRequestHandler((_wc, _permission, cb) => cb(false));
     ses.setPermissionCheckHandler(() => false);
-    win = new BrowserWindow({
+    win = new PlatformWindow({
       width: 1200,
       height: 860,
       minWidth: 720,
@@ -103,7 +104,7 @@ export class Publisher {
         webSecurity: true,
       },
     });
-    win.on("page-title-updated", (event) => {
+    win.webContents.on("page-title-updated", (event) => {
       event.preventDefault();
       win!.setTitle(`${a.name} · ${platforms[a.platform].name}`);
     });
@@ -240,7 +241,7 @@ export class Publisher {
     return win;
   }
   async evaluate(
-    win: BrowserWindow,
+    win: PlatformWindow,
     account: Account,
     request: FillRequest,
     execution = new Execution(),

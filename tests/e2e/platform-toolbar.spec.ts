@@ -35,7 +35,10 @@ test("平台导航栏独立布局、历史导航、草稿保护和账号会话",
       (id) => window.studio.command({ type: "account.open", id }),
       id,
     );
-    const remote = app.windows().find((p) => p.url().includes("mp.sohu.com"))!;
+    const remote = app
+      .context()
+      .pages()
+      .find((p) => p.url().includes("mp.sohu.com"))!;
     await expect(remote.locator("input")).toBeVisible();
     const toolbar = () =>
       app
@@ -45,14 +48,43 @@ test("平台导航栏独立布局、历史导航、草稿保护和账号会话",
     await expect.poll(() => !!toolbar()).toBe(true);
     const bar = toolbar()!;
     await expect(bar.locator("#host")).toHaveText("mp.sohu.com");
-    const layout = await app.evaluate(({ BrowserWindow }) => {
-      const w = BrowserWindow.getAllWindows().find((w) =>
+    const layout = await app.evaluate(({ BaseWindow }) => {
+      const w = (BaseWindow.getAllWindows() as any[]).find((w) =>
         w.webContents.getURL().includes("mp.sohu.com"),
       )!;
-      return w.contentView.children.map((v) => v.getBounds());
+      return w.contentView.children.map((v: Electron.View) => v.getBounds());
     });
     expect(layout[0].y).toBe(52);
     expect(layout[1].height).toBe(52);
+    for (const mode of ["resize", "maximize", "restore"] as const) {
+      await app.evaluate(({ BaseWindow }, mode) => {
+        const w = (BaseWindow.getAllWindows() as any[]).find((w) =>
+          w.webContents.getURL().includes("mp.sohu.com"),
+        )!;
+        if (mode === "resize") w.setSize(1000, 700);
+        else if (mode === "maximize") w.maximize();
+        else w.unmaximize();
+      }, mode);
+      await expect
+        .poll(() =>
+          app.evaluate(({ BaseWindow }) => {
+            const w = (BaseWindow.getAllWindows() as any[]).find((w) =>
+              w.webContents.getURL().includes("mp.sohu.com"),
+            )!;
+            return w.contentView.children[0].getBounds().y;
+          }),
+        )
+        .toBe(52);
+    }
+    const expectedViewport = await app.evaluate(({ BaseWindow }) => {
+      const w = (BaseWindow.getAllWindows() as any[]).find((w) =>
+        w.webContents?.getURL().includes("mp.sohu.com"),
+      )!;
+      return w.getContentSize()[1] - 52;
+    });
+    expect(await remote.evaluate(() => window.innerHeight)).toBe(
+      expectedViewport,
+    );
     await remote.getByRole("link").click();
     await expect(remote).toHaveURL(/\/other/);
     await expect(bar.locator("#host")).not.toContainText("hidden-test");

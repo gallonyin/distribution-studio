@@ -1,10 +1,5 @@
-import {
-  BrowserWindow,
-  View,
-  WebContentsView,
-  ipcMain,
-  dialog,
-} from "electron";
+import { PlatformWindow } from "./platform-window";
+import { WebContentsView, ipcMain, dialog } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { platforms, type Account } from "../src/domain";
@@ -23,16 +18,14 @@ const homes: Partial<Record<Account["platform"], string>> = {
 };
 
 export function attachPlatformToolbar(
-  win: BrowserWindow,
+  win: PlatformWindow,
   account: Account,
   helper: () => void,
   hasFilledContent: () => boolean,
 ) {
   const remote = win.webContents;
-  const platformView = win.contentView;
-  const root = new View();
-  win.setContentView(root);
-  root.addChildView(platformView);
+  const platformView = win.platformView;
+  const root = win.contentView;
   const toolbar = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, "toolbar-preload.cjs"),

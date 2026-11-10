@@ -29,7 +29,7 @@ const probe = `(() => {
  return { url: location.href, text, accountControl, editor: title && body, loginForm: !body && (password || (phone && /登录/.test(text))) };
 })()`;
 async function readPage(
-  win: BrowserWindow,
+  win: Pick<BrowserWindow, "webContents" | "isDestroyed">,
   a: Account,
 ): Promise<HealthResult | null> {
   if (win.isDestroyed()) return null;
@@ -69,7 +69,7 @@ async function readPage(
 }
 export async function checkAccountHealth(
   a: Account,
-  existing?: BrowserWindow,
+  existing?: Pick<BrowserWindow, "webContents" | "isDestroyed">,
 ): Promise<HealthResult> {
   const fallback: HealthResult = {
     status: "unknown",

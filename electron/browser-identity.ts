@@ -36,7 +36,9 @@ function chromeIdentity() {
     },
   };
 }
-export async function applyChromeIdentity(win: BrowserWindow) {
+export async function applyChromeIdentity(
+  win: Pick<BrowserWindow, "webContents" | "isDestroyed">,
+) {
   try {
     win.webContents.debugger.attach("1.3");
     await win.webContents.debugger.sendCommand("Network.enable");

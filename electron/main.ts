@@ -76,7 +76,7 @@ app.on("before-quit", (e) => {
     void clearCopiedSecret().finally(() => app.quit());
   }
 });
-function showLoginHelper(id: string, parent: BrowserWindow) {
+function showLoginHelper(id: string, parent: Electron.BaseWindow) {
   const current = helpers.get(id);
   if (current && !current.win.isDestroyed()) {
     current.win.show();
